@@ -10,7 +10,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     add_compile_options("/W3")
 endif()
 
-add_custom_target("${TARGET_NAME}" ALL COMMAND "pwd")
+add_custom_target("${TARGET_NAME}" ALL COMMAND  ${CMAKE_COMMAND} -E echo ${TARGET_NAME})
 set_target_properties("${TARGET_NAME}" PROPERTIES FOLDER "${TARGET_NAME}" )
 
 add_subdirectory(source)
