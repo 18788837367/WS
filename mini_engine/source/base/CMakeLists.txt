@@ -1,0 +1,11 @@
+set(TARGET_NAME base)
+
+file(GLOB_RECURSE HEADER_FILES "*.h")
+file(GLOB_RECURSE SOURCE_FILES "*.cpp")
+
+add_library(${TARGET_NAME} ${HEADER_FILES} ${SOURCE_FILES})
+
+set_target_properties(${TARGET_NAME} PROPERTIES FOLDER "${MODEL_NAME}/${TARGET_NAME}")
+
+
+
