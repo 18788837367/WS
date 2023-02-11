@@ -36,9 +36,20 @@ FreeList::Node* FreeList::init(void* begin, void* end, size_t elementSize, size_
     const size_t d = uintptr_t(n) - uintptr_t(p);
     const size_t num = (uintptr_t(end)-uintptr_t(begin))/d;
     
+    Node* head = static_cast<Node*>(p);
     
-    
-    
-    
+    Node* cur = head;
+    for(int i=0;i<num;++i) {
+        Node* next = pointermath::add(cur, d);
+        cur->m_Next=next;
+        cur=next;
+    }
+    assert(cur<end);
+    assert(pointermath::add(cur, d)<=end);
+    cur->m_Next=nullptr;
+    return head;
+}
+
+AtomicFreeList::AtomicFreeList(void* begin, void* end, size_t elementSize, size_t alignment, size_t extra)  {
     
 }

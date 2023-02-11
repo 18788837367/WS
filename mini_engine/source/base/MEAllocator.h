@@ -186,9 +186,33 @@ private:
 class AtomicFreeList {
 public:
     AtomicFreeList() noexcept = default;
+    AtomicFreeList(void* begin, void* end, size_t elementSize, size_t alignment, size_t extra) noexcept;
+    AtomicFreeList(const AtomicFreeList& rhs) = delete;
+    AtomicFreeList& operator=(const AtomicFreeList& rhs) = delete;
     
+    void* pop() noexcept {
+        
+        return nullptr;
+    }
     
+    void push(void* p) noexcept {
+        
+    }
     
+    void* getFirst() noexcept {
+        return nullptr;
+    }
+private:
+    class Node {
+    public:
+        std::atomic<Node*> m_Next;
+    };
+    class alignas(8) HeadPtr {
+        int32_t m_Offset=0;
+        uint32_t m_Tag=0;
+    };
+    std::atomic<HeadPtr> m_Head{};
+    Node* m_Storage=nullptr;
 };
 
 
