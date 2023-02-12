@@ -10,6 +10,7 @@
 #include <type_traits>
 #include "MESpinLock.h"
 #include <mutex>
+#include <assert.h>
 
 namespace pointermath {
 
@@ -33,7 +34,7 @@ static inline P* align(P* p, size_t alignment, size_t offset) noexcept {
 
 inline void* aligned_alloc(size_t size, size_t align) noexcept {
     align=(align<sizeof(void*))?sizeof(void*):align;
-    assert(align && !(align&align-1));
+    assert(align && !(align & align - 1));
     assert((align%sizeof(void*))==0);
     void* p=nullptr;
 #if defined(WIN32)
@@ -191,12 +192,43 @@ public:
     AtomicFreeList& operator=(const AtomicFreeList& rhs) = delete;
     
     void* pop() noexcept {
-        
-        return nullptr;
+        Node* const storage = m_Storage;
+
+        HeadPtr currentHead = m_Head.load();
+        while (!currentHead.m_Offset>=0)
+        {
+            //如果其他线程跑在我们前面，这里next可能已经存在。
+            //这种情况下，计算的newHead会被丢弃，因为compare_exchange_weak失败，
+            //然后该线程使用更新的currentHead值循环，然后重试
+            Node* const next = storage[currentHead.m_Offset].m_Next.load(std::memory_order_relaxed);
+            const HeadPtr newHead{next?int32_t(next-storage):-1,currentHead.m_Tag+1};
+            
+            //传入期待的数和新的数,它们变量的值和期待的值是否一致，
+            //如果是，则替换为用户指定的一个新的数值,
+            //如果不是，则将变量的值和期待的值交换
+            if (m_Head.compare_exchange_weak(currentHead, newHead)) {
+                assert(!next || next>=storage);
+                break;
+            }
+        }
+        void* p = (currentHead.m_Offset >= 0) ? (storage+currentHead.m_Offset) : nullptr;
+        assert(!p || p >= storage);
+        return p;
     }
     
     void push(void* p) noexcept {
+        Node* const storage = m_Storage;
+        assert(p && p >= m_Storage);
+        Node* const node = static_cast<Node*>(p);
         
+        HeadPtr currentHead = m_Head.load();
+        HeadPtr newHead = {int32_t(node-storage),currentHead.m_Tag+1};
+        do
+        {
+            newHead.m_Tag = currentHead.m_Tag + 1;
+            Node* const n = (currentHead.m_Offset >= 0) ? (storage + currentHead.m_Offset) : nullptr;
+            node->m_Next.store(n, std::memory_order_relaxed);
+        } while (!m_Head.compare_exchange_weak(currentHead,newHead));
     }
     
     void* getFirst() noexcept {
@@ -208,6 +240,7 @@ private:
         std::atomic<Node*> m_Next;
     };
     class alignas(8) HeadPtr {
+    public:
         int32_t m_Offset=0;
         uint32_t m_Tag=0;
     };
@@ -304,11 +337,159 @@ template<
 class PoolAllocator {
     static_assert(ELEMENT_SIZE>=sizeof(void*), "ELEMENT_SIZE must accommodate at least a pointer");
 public:
-    void* alloc(size_t size=ELEMENT_SIZE, size_t alignment=ALIGNMENT, size_t offset=OFFSET) noexcept {
-     
-        return nullptr;
+    PoolAllocator() noexcept = default;
+
+    PoolAllocator(void* begin, void* end) noexcept
+    :m_FreeList(begin,end,ELEMENT_SIZE,ALIGNMENT,OFFSET){
     }
-    
+
+    template <typename AREA>
+    explicit PoolAllocator(const AREA& area) noexcept
+    :PoolAllocator(area.begin(),area.end()){
+    }
+
+    PoolAllocator(const PoolAllocator& rhs) = delete;
+    PoolAllocator& operator=(const PoolAllocator& rhs) = delete;
+
+    PoolAllocator(PoolAllocator&& rhs) = default;
+    PoolAllocator& operator=(PoolAllocator&& rhs) = default;
+
+    ~PoolAllocator() noexcept = default;
+
+    void* alloc(size_t size=ELEMENT_SIZE, size_t alignment=ALIGNMENT, size_t offset=OFFSET) noexcept {
+        assert(size<=ELEMENT_SIZE);
+        assert(alignment <= ALIGNMENT);
+        assert(offset <= OFFSET);
+        return m_FreeList.pop();
+    }
+
+    void free(void* p, size_t ELEMENT_SIZE) noexcept {
+        m_FreeList.push(p);
+    }
+
+    constexpr size_t getSize() const noexcept {
+        return ELEMENT_SIZE
+    }
+
+    void* getCurrent() noexcept {
+        return m_FreeList.getFirst();
+    }
 private:
     FREELIST m_FreeList;
 };
+
+template<typename T, size_t OFFSET = 0>
+using ObjectPoolAllocator = PoolAllocator < sizeof(T),
+    std::max(alignof(FreeList), alignof(T)), OFFSET>;
+
+template<typename T, size_t OFFSET = 0>
+using ThreadSafeObjectPoolAllocator = PoolAllocator< sizeof(T),
+    std::max(alignof(FreeList), alignof(T)), OFFSET, AtomicFreeList>;
+
+
+template<typename AllocatorPolicy, typename LockingPolicy, 
+         typename AreaPolicy = AreaPolicy::HeapArea>
+class Arena {
+public:
+    Arena() = default;
+
+    template<typename ...ARGS>
+    Arena(const char* name, size_t size, ARGS&& ... args)
+        :m_AreaName(name)
+        , m_Area(size)
+        , m_Allocator(m_Area, std::forward<ARGS>(args) ...) {
+    }
+
+    template<typename ... ARGS>
+    Arena(const char* name, AreaPolicy&& area, ARGS&& ...args)
+        : m_AreaName(name)
+        , m_Area(std::forward<AreaPolicy>(area))
+        , m_Allocator(m_Area, std::forward<ARGS>(args) ...) {
+    }
+
+    void* alloc(size_t size, size_t alignment = alignof(std::max_align_t), size_t extra = 0) noexcept {
+        std::lock_guard<LockingPolicy> guard(m_Lock);
+        void* p = m_Allocator.alloc(size,alignment, extra);
+        return p;
+    }
+
+    template<typename T>
+    T* alloc(size_t count, size_t alignment = alignof(T), size_t extra = 0) noexcept {
+        return (T*)alloc(count*sizeof(T),alignment,extra);
+    }
+
+    void free(void* p) noexcept {
+        if (p) {
+            std::lock_guard<LockingPolicy> guard(m_Lock);
+            m_Allocator.free(p);
+        }
+    }
+
+    void free(void* p, size_t size) noexcept {
+        if (p) {
+            std::lock_guard<LockingPolicy> guard(m_Lock);
+            m_Allocator.free(p, size);
+        }
+    }
+
+    void reset() noexcept {
+        std::lock_guard<LockingPolicy> guard(m_Lock);
+        m_Allocator.resert();
+    }
+
+    void* getCurrent() noexcept {
+        return m_Allocator.getCurrent();
+    }
+
+    void rewind(void* addr) noexcept {
+        std::lock_guard<LockingPolicy> guard(m_Lock);
+        m_Allocator.rewind(addr);
+    }
+
+    template<typename T, size_t ALIGN=alignof(T), typename ... ARGS>
+    T* make(ARGS&& ... agrs) noexcept {
+        void* const p = this->alloc(sizeof(T), ALIGN);
+        return p ? new (p) T(std::forward<ARGS>(agrs)...) : nullptr;
+    }
+
+    template<typename T>
+    void destroy(T* p) noexcept {
+        if (p) {
+            p->~T();
+            this->free((void*)p, sizeof(T));
+        }
+    }
+
+    char const* getName() const noexcept {
+        return m_AreaName;
+    }
+
+    AllocatorPolicy& getAllocator() noexcept {
+        return m_Allocator;
+    }
+    AllocatorPolicy const& getAllocator() const noexcept {
+        return m_Allocator;
+    }
+
+    AreaPolicy& getArea() noexcept {
+        return m_Area;
+    }
+    AreaPolicy const& getArea() const noexcept {
+        return m_Area;
+    }
+
+    friend void swap(Arena& lhs, Arena& rhs) noexcept {
+        std::swap(lhs.m_AreaName, rhs.m_AreaName);
+        std::swap(lhs.m_Area, rhs.m_Area);
+        std::swap(lhs.m_Allocator, rhs.m_Allocator);
+        std::swap(lhs.m_Lock, rhs.m_Lock);
+    }
+
+private:
+    char const* m_AreaName = nullptr;
+    AreaPolicy m_Area;
+    AllocatorPolicy m_Allocator;
+    LockingPolicy m_Lock;
+};
+
+using HeapArea = Arena<HeapAllocator, LockingPolicy::NoLock>;

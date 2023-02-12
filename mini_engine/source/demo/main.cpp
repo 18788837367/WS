@@ -1,4 +1,5 @@
 #include "MEObject.h"
+#include "MEJobSystem.h"
 
 #include <iostream>
 
@@ -29,6 +30,8 @@ int main() {
     a->p();
     ME_SP_RETAIN(A, res, a);
     ME_SP_RELEASE(a);
+
+    JobSystem js=JobSystem(2);
     
     return 0;
 }

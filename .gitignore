@@ -1,5 +1,6 @@
 build/*
 bin/*
+.vscode/*
 graphical_api/bin/*
 mini_engine/bin/*
 mo_engine/bin/*

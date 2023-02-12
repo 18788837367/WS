@@ -40,7 +40,7 @@ public:
     virtual ~MERenderOpenGLObjProgram();
     
 private:
-    GLuint m_ID=0;
+  
 };
 
 

@@ -15,8 +15,10 @@
 #include <map>
 #include "MEWorkStealingDequeue.h"
 #include "MESpinLock.h"
+#include "MEAllocator.h"
 
 class JobSystem : public MEObject {
+    static constexpr size_t MAX_JOB_COUNT = 16384;
 public:
     
     class Job;
@@ -47,8 +49,7 @@ public:
     
 private:
     struct alignas(64) ThreadState {
-        MEWorkStealingDequeue<uint16_t,16384> m_WorkQueue;
-        
+        MEWorkStealingDequeue<uint16_t, MAX_JOB_COUNT> m_WorkQueue;
         JobSystem* m_JS;
         std::thread m_Thread;
         std::default_random_engine m_Gen;
@@ -60,6 +61,9 @@ private:
     std::mutex m_Mutex;
     std::condition_variable m_WaiterCondition;
     std::atomic<uint32_t> m_ActiveJobs={0};
+
+    Arena<ThreadSafeObjectPoolAllocator<Job>,LockingPolicy::NoLock> m_JobPool;
+
     std::vector<ThreadState> m_ThreadStates;
     std::atomic<bool> m_ExitRequested={false};
     std::atomic<uint16_t> m_AdoptedThreads;

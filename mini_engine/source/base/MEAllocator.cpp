@@ -50,6 +50,27 @@ FreeList::Node* FreeList::init(void* begin, void* end, size_t elementSize, size_
     return head;
 }
 
-AtomicFreeList::AtomicFreeList(void* begin, void* end, size_t elementSize, size_t alignment, size_t extra)  {
-    
+AtomicFreeList::AtomicFreeList(void* begin, void* end, size_t elementSize, size_t alignment, size_t extra) noexcept {
+    void* const p = pointermath::align(begin, alignment, extra);
+    void* const n = pointermath::align(pointermath::add(p,elementSize),alignment,extra);
+        
+    assert(p>=begin && p<end);
+    assert(n>=begin && n<end && n>p);
+
+    const size_t d = uintptr_t(n) - uintptr_t(p);
+    const size_t num = (uintptr_t(end) - uintptr_t(p)) / d;
+
+    Node* head = static_cast<Node*>(p);
+    m_Storage = head;
+
+    Node* cur = head;
+    for (size_t i = 1; i < num; ++i) {
+        Node* next = pointermath::add(cur, d);
+        cur->m_Next = next;
+        cur = next;
+    }
+    assert(cur < end);
+    assert(pointermath::add(cur, d) <= end);
+    cur->m_Next = nullptr;
+    m_Head.store({int32_t(head-m_Storage),0});
 }

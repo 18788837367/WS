@@ -19,7 +19,7 @@ void MERenderDeviceContext::renderStart()
 
 bool MERenderDeviceContext::renderUpdate()
 {
-    
+    return false;
 }
 
 void MERenderDeviceContext::renderDraw()

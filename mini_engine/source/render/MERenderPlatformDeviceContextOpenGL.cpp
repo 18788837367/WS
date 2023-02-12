@@ -15,6 +15,7 @@ void MERenderPlatformDeviceContextOpenGL::renderStart()
 bool MERenderPlatformDeviceContextOpenGL::renderUpdate()
 {
     
+    return false;
 }
 
 void MERenderPlatformDeviceContextOpenGL::renderDraw()
