@@ -32,66 +32,23 @@ class MEWorkStealingDequeue {
     std::atomic<index_t> m_Buttom={0};
     TYPE m_Items[MASK];
     
-    TYPE getItemAt(index_t index) noexcept {return m_Items[index&MASK];};
-    void setItemAt(index_t index, TYPE item) noexcept {m_Items[index&MASK]=item;};
+    TYPE getItemAt(index_t index) noexcept {return m_Items[index&MASK];}
+    void setItemAt(index_t index, TYPE item) noexcept {m_Items[index&MASK]=item;}
     
 public:
+    using value_type = TYPE;
     //在队列底部添加元素
     //必须在主线程调用
-    inline void push(TYPE item) noexcept {
-        auto bottom=m_Buttom.load(std::memory_order_relaxed);
-        setItemAt(bottom, item);
-        
-        m_Buttom.store(bottom+1, std::memory_order_relaxed);
-    }
+    inline void push(TYPE item) noexcept;
+
     //在队列底部移除元素
     //必须在主线程调用
-    inline TYPE pop() noexcept {
-        auto bottom=m_Buttom.fetch_sub(1, std::memory_order_seq_cst)-1;
-        assert(bottom>=-1);
-        
-        auto top=m_Top.fetch_sub(1, std::memory_order_seq_cst);
-        if(top<bottom) {
-            return getItemAt(bottom);
-        }
-        
-        TYPE item{};
-        if(top==bottom) {
-            item=getItemAt(bottom);
-            
-            if(m_Top.compare_exchange_strong(top, top+1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
-                top++;
-            }
-            else {
-                item=TYPE();
-            }
-        }
-        else {
-            assert(top-bottom==1);
-        }
-        
-        m_Buttom.store(top, std::memory_order_relaxed);
-        return item;
-    }
+    inline TYPE pop() noexcept;
     
     //从其他线程顶部窃取元素
     //可以与push、pop同时调用
     //成功返回元素，失败返回空元素
-    inline TYPE steal() noexcept {
-        while (true) {
-            auto top = m_Top.load(std::memory_order_seq_cst);
-            auto bottom=m_Buttom.load(std::memory_order_seq_cst);
-            
-            if(top>=bottom) {
-                return TYPE();
-            }
-            
-            TYPE item(getItemAt(top));
-            if(m_Top.compare_exchange_strong(top, top+1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
-                return item;
-            }
-        }
-    }
+    inline TYPE steal() noexcept;
     
     size_t getSize() const noexcept {return COUNT;}
     
@@ -101,3 +58,58 @@ public:
         return bottom-top;
     }
 };
+
+
+template<typename TYPE, size_t COUNT>
+void MEWorkStealingDequeue<TYPE, COUNT>::push(TYPE item) noexcept {
+    auto bottom = m_Buttom.load(std::memory_order_relaxed);
+    setItemAt(bottom, item);
+
+    m_Buttom.store(bottom + 1, std::memory_order_relaxed);
+}
+
+template<typename TYPE, size_t COUNT>
+TYPE MEWorkStealingDequeue<TYPE, COUNT>::pop() noexcept {
+    auto bottom = m_Buttom.fetch_sub(1, std::memory_order_seq_cst) - 1;
+    assert(bottom >= -1);
+
+    auto top = m_Top.fetch_sub(1, std::memory_order_seq_cst);
+    if (top < bottom) {
+        return getItemAt(bottom);
+    }
+
+    TYPE item{};
+    if (top == bottom) {
+        item = getItemAt(bottom);
+
+        if (m_Top.compare_exchange_strong(top, top + 1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
+            top++;
+        }
+        else {
+            item = TYPE();
+        }
+    }
+    else {
+        assert(top - bottom == 1);
+    }
+
+    m_Buttom.store(top, std::memory_order_relaxed);
+    return item;
+}
+
+template<typename TYPE, size_t COUNT>
+TYPE MEWorkStealingDequeue<TYPE,COUNT>::steal() noexcept {
+    while (true) {
+        auto top = m_Top.load(std::memory_order_seq_cst);
+        auto bottom = m_Buttom.load(std::memory_order_seq_cst);
+
+        if (top >= bottom) {
+            return TYPE();
+        }
+
+        TYPE item(getItemAt(top));
+        if (m_Top.compare_exchange_strong(top, top + 1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
+            return item;
+        }
+    }
+}

@@ -1,7 +1,7 @@
 #include "MEAllocator.h"
 
 LinearAllocator::LinearAllocator(void* begin, void* end) noexcept
-    :m_Begin(begin), m_Size(uintptr_t(end)-uintptr_t(begin)){
+    :m_Begin(begin), m_Size(uint32_t(uintptr_t(end)-uintptr_t(begin))){
 }
 
 LinearAllocator::LinearAllocator(LinearAllocator&& rhs) noexcept {

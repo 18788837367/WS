@@ -31,7 +31,7 @@ int main() {
     ME_SP_RETAIN(A, res, a);
     ME_SP_RELEASE(a);
 
-    JobSystem js=JobSystem(2);
-    
+    JobSystem js = JobSystem(2);
+
     return 0;
 }

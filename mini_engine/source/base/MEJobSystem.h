@@ -19,6 +19,7 @@
 
 class JobSystem : public MEObject {
     static constexpr size_t MAX_JOB_COUNT = 16384;
+    using WorkQueue = MEWorkStealingDequeue<uint16_t, MAX_JOB_COUNT>;
 public:
     
     class Job;
@@ -43,20 +44,23 @@ public:
         mutable std::atomic<uint16_t> m_RefCount={1};
     };
     
-    explicit JobSystem(size_t threadCount=0, size_t adoptableThreadCount=1) noexcept;
+    explicit JobSystem(size_t userThreadCount=0, size_t adoptableThreadCount=1) noexcept;
     ~JobSystem();
     
     
 private:
     struct alignas(64) ThreadState {
-        MEWorkStealingDequeue<uint16_t, MAX_JOB_COUNT> m_WorkQueue;
-        JobSystem* m_JS;
+        WorkQueue m_WorkQueue;
+        JobSystem* m_JS=nullptr;
         std::thread m_Thread;
         std::default_random_engine m_Gen;
-        uint32_t m_ID={0};
+        uint32_t m_ID = { 0 };
     };
-    
-    
+
+    void loop(ThreadState* state) noexcept;
+    void setThreadName(const char* name) noexcept;
+private:
+
     //以下存在线程竞争
     std::mutex m_Mutex;
     std::condition_variable m_WaiterCondition;
