@@ -14,14 +14,14 @@ class MERenderDeviceContextOpenGL : public MERenderDeviceContext {
 private:
     
 protected:
-    void renderDraw() override;
+    void renderDraw();
     
 public:
-    void performDraw();
-    void performClear();
+    void performDraw() override;
+    void performClear() override;
     
-    void newStaticBuffer();
-    void newSharedBuffer();
+    void newStaticBuffer() override;
+    void newSharedBuffer() override;
 };
 
 #endif /* MERenderDeviceContextOpenGL_h */

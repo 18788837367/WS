@@ -17,7 +17,7 @@ private:
 protected:
     void renderStart();
     bool renderUpdate();
-    virtual void renderDraw();
+    void renderDraw();
     
 };
 

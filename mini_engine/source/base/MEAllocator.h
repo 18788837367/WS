@@ -363,12 +363,12 @@ public:
         return m_FreeList.pop();
     }
 
-    void free(void* p, size_t ELEMENT_SIZE) noexcept {
+    void free(void* p, size_t = ELEMENT_SIZE) noexcept {
         m_FreeList.push(p);
     }
 
     constexpr size_t getSize() const noexcept {
-        return ELEMENT_SIZE
+        return ELEMENT_SIZE;
     }
 
     void* getCurrent() noexcept {

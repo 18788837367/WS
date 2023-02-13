@@ -48,6 +48,11 @@ public:
     ~JobSystem();
     
     
+public:
+    static void setThreadName(const char* name) noexcept;
+    //设置线程亲和力
+    static void setThreadAffinityById(size_t id) noexcept;
+    
 private:
     struct alignas(64) ThreadState {
         WorkQueue m_WorkQueue;
@@ -56,9 +61,29 @@ private:
         std::default_random_engine m_Gen;
         uint32_t m_ID = { 0 };
     };
-
+    
+    ThreadState& getState() noexcept;
+    
+    Job* allocateJon() noexcept;
+    JobSystem::ThreadState* getStateToStealFrom(JobSystem::ThreadState& state) noexcept;
+    bool hasJobCompleted(Job* job) noexcept;
+    
+    void requestExit() noexcept;
+    bool exitRequested() const noexcept;
+    bool hasActiveJobs() const noexcept;
+    
     void loop(ThreadState* state) noexcept;
-    void setThreadName(const char* name) noexcept;
+    bool execute(JobSystem::ThreadState& state) noexcept;
+    Job* steal(JobSystem::ThreadState& state) noexcept;
+    void finish(Job* job) noexcept;
+    
+    void put(WorkQueue& workQueue, Job* job) noexcept;
+    Job* pop(WorkQueue& workQueue) noexcept;
+    Job* steal(WorkQueue& workQueue) noexcept;
+    
+    void wait(std::unique_lock<std::mutex>& lock, Job* job=nullptr) noexcept;
+    void wakeAll() noexcept;
+    void wakeOne() noexcept;
 private:
 
     //以下存在线程竞争
