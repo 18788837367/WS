@@ -55,6 +55,7 @@ void JobSystem::loop(ThreadState* state) noexcept {
     setThreadAffinityById(state->m_ID);
     
     m_ThreadMapLock.lock();
+    //emplace当插入成功返回true，插入失败则返回false(存在相同的键值对)
     bool inserted = m_ThreadMap.emplace(std::this_thread::get_id(), state).second;
     m_ThreadMapLock.unlock();
     if(!inserted) {
@@ -63,11 +64,17 @@ void JobSystem::loop(ThreadState* state) noexcept {
     
     //运行主循环
     do {
-        
-        
-        
+        if(!execute(*state)) {
+            //没有任务
+            std::unique_lock<std::mutex> lock(m_Mutex);
+            //没有退出请求
+            //没有活动的任务
+            while (!exitRequested() && !hasActiveJobs()) {
+                wait(lock);
+                setThreadAffinityById(state->m_ID);
+            }
+        }
     } while (!exitRequested());
-    
 }
 
 void JobSystem::setThreadName(const char* name) noexcept {
@@ -101,8 +108,20 @@ bool JobSystem::exitRequested() const noexcept {
 }
 
 bool JobSystem::execute(JobSystem::ThreadState& state) noexcept {
- 
-    return false;
+    Job* job = pop(state.m_WorkQueue);
+    if(job==nullptr) {
+        //我们的队列为空，尝试steal一个任务
+        job = steal(state);
+    }
+    
+    if(job) {
+        assert(job->m_RunningJobCount.load(std::memory_order_relaxed)>=1);
+        if(job->m_Function) {
+            job->m_Function(job->m_Storage, *this, job);
+        }
+        finish(job);
+    }
+    return job!=nullptr;
 }
 
 JobSystem::ThreadState& JobSystem::getState() noexcept {
@@ -111,7 +130,23 @@ JobSystem::ThreadState& JobSystem::getState() noexcept {
     return state;
 }
 
-JobSystem::Job* JobSystem::allocateJon() noexcept {
+void JobSystem::incRef(Job const *job) noexcept {
+    //递增引用计数时不执行任何操作，因此我们使用memory_order_relaxed
+    job->m_RefCount.fetch_add(1, std::memory_order_relaxed);
+}
+
+void JobSystem::decRef(Job const *job) noexcept {
+    //我们需要确保在删除作业之前没有其他线程的访问。为了实现这一点，我们需要保证decRef的读写没有重新排序，
+    //因为其他的线程可能持有最后一个引用
+    auto c = job->m_RefCount.fetch_sub(1,std::memory_order_acq_rel);
+    assert(c>0);
+    if(c==1) {
+        //这是最后一个引用，我们可能安全的删除job
+        m_JobPool.destroy(job);
+    }
+}
+
+JobSystem::Job* JobSystem::allocateJob() noexcept {
     return nullptr;
 }
 
@@ -128,23 +163,77 @@ void JobSystem::requestExit() noexcept {
 }
 
 bool JobSystem::hasActiveJobs() const noexcept {
-    
+    return m_ActiveJobs.load(std::memory_order_relaxed)>0;
 }
 
 JobSystem::Job* JobSystem::steal(JobSystem::ThreadState& state) noexcept {
-    return nullptr;
+    Job* job = nullptr;
+    do {
+        ThreadState* const stateToStealFrom = getStateToStealFrom(state);
+        if(stateToStealFrom) {
+            job=steal(stateToStealFrom->m_WorkQueue);
+        }
+        //如果有活动的任务，则该队列没有可获取的内容，那么尝试在来一次
+    } while (!job && hasActiveJobs());
+    return job;
 }
 
 void JobSystem::finish(Job* job) noexcept {
+    bool notify = false;
+    
+    //终止任务，通知parent
+    Job* const storage = m_JobStroageBase;
+    do {
+        auto runningJobCount = job->m_RunningJobCount.fetch_sub(1,std::memory_order_acq_rel);
+        assert(runningJobCount>0);
+        
+        if(runningJobCount==1) {
+            //没有更多的任务，销毁这个对象，通知parent
+            notify=true;
+            Job* const parent = job->m_Parent==0x7FFF?nullptr: &storage[job->m_Parent];
+            decRef(job);
+            job = parent;
+        }
+        else {
+            //还有其他任务，但我们完成了
+            break;
+        }
+    } while (job);
     
 }
 
 void JobSystem::put(WorkQueue& workQueue, Job* job) noexcept {
+    assert(job);
+    size_t index=job-m_JobStroageBase;
+    assert(index>=0 && index<MAX_JOB_COUNT);
     
+    workQueue.push(uint16_t(index+1));
+    
+    //增加任务活动数量
+    uint32_t oldActionJobs=m_ActiveJobs.fetch_add(1, std::memory_order_relaxed);
+    //有可能任务已经被提取，所以oldActionJobs是负值，当这种情况下，发出信号
+    if(oldActionJobs>=0) {
+        //唤醒另外一个线程
+        wakeOne();
+    }
 }
 
 JobSystem::Job* JobSystem::pop(WorkQueue& workQueue) noexcept {
-    return nullptr;
+    //递减活动任务，确保只剩下一个任务时（我们将要拾取它），其他线程不会循环尝试做相同的事情
+    m_ActiveJobs.fetch_sub(1, std::memory_order_relaxed);
+    
+    size_t index = workQueue.pop();
+    assert(index<=MAX_JOB_COUNT);
+    
+    Job* job = !index?nullptr: &m_JobStroageBase[index-1];
+    //如果任务不存在，我们更正activeJobs
+    if(!job) {
+        if(m_ActiveJobs.fetch_add(1,std::memory_order_relaxed)>=0) {
+            //如果有活跃的任务，我们需要唤醒其他线程。我们知道这不可能是当前线程，因为没获取到任务。
+            wakeOne();
+        }
+    }
+    return job;
 }
 
 JobSystem::Job* JobSystem::steal(WorkQueue& workQueue) noexcept {
@@ -152,13 +241,25 @@ JobSystem::Job* JobSystem::steal(WorkQueue& workQueue) noexcept {
 }
 
 void JobSystem::wait(std::unique_lock<std::mutex>& lock, Job* job) noexcept {
-    
+    do {
+#warning TODO 
+        //使用超时检测，日过4秒内没发生事情，说明系统已挂起
+        std::cv_status status = m_WaiterCondition.wait_for(lock, std::chrono::milliseconds(4000));
+        if(status==std::cv_status::no_timeout) {
+            break;
+        }
+        
+        
+        
+    } while (true);
 }
 
 void JobSystem::wakeAll() noexcept {
-    
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_WaiterCondition.notify_all();
 }
 
 void JobSystem::wakeOne() noexcept {
-    
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_WaiterCondition.notify_one();
 }

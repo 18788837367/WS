@@ -64,7 +64,10 @@ private:
     
     ThreadState& getState() noexcept;
     
-    Job* allocateJon() noexcept;
+    void incRef(Job const *job) noexcept;
+    void decRef(Job const *job) noexcept;
+    
+    Job* allocateJob() noexcept;
     JobSystem::ThreadState* getStateToStealFrom(JobSystem::ThreadState& state) noexcept;
     bool hasJobCompleted(Job* job) noexcept;
     
