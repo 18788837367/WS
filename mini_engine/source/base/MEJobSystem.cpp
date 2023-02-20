@@ -44,7 +44,10 @@ JobSystem::JobSystem(size_t userThreadCount, size_t adoptableThreadCount) noexce
 }
 
 JobSystem::~JobSystem() {
-    
+    requestExit();
+    for (auto& state : m_ThreadStates) {
+        state.m_Thread.join();
+    }
 }
 
 void JobSystem::loop(ThreadState* state) noexcept {
@@ -104,6 +107,7 @@ void JobSystem::setThreadAffinityById(size_t id) noexcept {
 }
 
 bool JobSystem::exitRequested() const noexcept {
+    //线程退出
     return m_ExitRequested.load(std::memory_order_relaxed)>0;
 }
 
@@ -125,12 +129,13 @@ bool JobSystem::execute(JobSystem::ThreadState& state) noexcept {
 }
 
 JobSystem::ThreadState& JobSystem::getState() noexcept {
-    JobSystem::ThreadState state;
-    
-    return state;
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    auto iter = m_ThreadMap.find(std::this_thread::get_id());
+    assert(iter != m_ThreadMap.end());
+    return *iter->second;
 }
 
-void JobSystem::incRef(Job const *job) noexcept {
+void JobSystem::incRef(Job const* job) noexcept {
     //递增引用计数时不执行任何操作，因此我们使用memory_order_relaxed
     job->m_RefCount.fetch_add(1, std::memory_order_relaxed);
 }
@@ -147,19 +152,34 @@ void JobSystem::decRef(Job const *job) noexcept {
 }
 
 JobSystem::Job* JobSystem::allocateJob() noexcept {
-    return nullptr;
+    return m_JobPool.make<Job>();
 }
 
 JobSystem::ThreadState* JobSystem::getStateToStealFrom(JobSystem::ThreadState& state) noexcept {
-    return nullptr;
+    auto& threadStates = m_ThreadStates;
+    uint16_t adopted = m_AdoptedThreads.load(std::memory_order_relaxed);
+    uint16_t const threadCount = adopted + m_ThreadCount;
+
+    JobSystem::ThreadState* stateToStealFrom = nullptr;
+    if (threadCount > 2) {
+        do {
+            std::uniform_int_distribution<uint16_t> rand(0, threadCount);
+            uint16_t index = rand(state.m_Gen);
+            assert(index < threadStates.size());
+            stateToStealFrom = &threadStates[index];
+        } while (stateToStealFrom == &state);
+    }
+    return stateToStealFrom;
 }
 
 bool JobSystem::hasJobCompleted(Job* job) noexcept {
-    return false;
+    return job->m_RunningJobCount.load(std::memory_order_acquire)<=0;
 }
 
 void JobSystem::requestExit() noexcept {
-    
+    m_ExitRequested.store(true);
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_WaiterCondition.notify_all();
 }
 
 bool JobSystem::hasActiveJobs() const noexcept {
@@ -237,20 +257,37 @@ JobSystem::Job* JobSystem::pop(WorkQueue& workQueue) noexcept {
 }
 
 JobSystem::Job* JobSystem::steal(WorkQueue& workQueue) noexcept {
-    return nullptr;
+    m_ActiveJobs.fetch_sub(1, std::memory_order_relaxed);
+
+    size_t index = workQueue.steal();
+    assert(index <= MAX_JOB_COUNT);
+
+    Job* job = !index ? nullptr : &m_JobStroageBase[index-1];
+
+    if (!job) {
+        if (m_ActiveJobs.fetch_add(1, std::memory_order_relaxed) >= 0) {
+            wakeOne();
+        }
+    }
+    return job;
 }
 
 void JobSystem::wait(std::unique_lock<std::mutex>& lock, Job* job) noexcept {
     do {
-#warning TODO 
-        //使用超时检测，日过4秒内没发生事情，说明系统已挂起
+        //当线程收到通知或者超时，说明系统已挂起
         std::cv_status status = m_WaiterCondition.wait_for(lock, std::chrono::milliseconds(4000));
         if(status==std::cv_status::no_timeout) {
+            //没超时，说明被激活
             break;
         }
+
+        //debug
+        auto id = getState().m_ID;
+        auto activeJobs = m_ActiveJobs.load();
         
-        
-        
+        if (job) {
+            //debug
+        }
     } while (true);
 }
 

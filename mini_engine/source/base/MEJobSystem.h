@@ -47,7 +47,45 @@ public:
     explicit JobSystem(size_t userThreadCount=0, size_t adoptableThreadCount=1) noexcept;
     ~JobSystem();
     
+    //当前线程加入线程池
+    void adopt();
+
+    //移除当前线程
+    void emancipate();
+
+    //设置当前节点为根节点
+    Job* setRootJob(Job* job) noexcept { return m_RootJob = job; }
     
+    //创建Job
+    Job* create(Job* parent, JobFunc func) noexcept;
+
+    Job* create(Job* parent = nullptr) noexcept {
+        return create(parent, nullptr);
+    }
+
+
+   
+    template<class T>
+
+
+
+
+    void cancel(Job* &job) noexcept;
+
+    Job* retain(Job* job) noexcept;
+
+    void release(Job*& job) noexcept;
+
+    void release(Job* &&) noexcept;
+
+    void run(Job*& job) noexcept;
+
+    void run(Job*&& job) noexcept;
+
+    void signal() noexcept;
+
+
+
 public:
     static void setThreadName(const char* name) noexcept;
     //设置线程亲和力
