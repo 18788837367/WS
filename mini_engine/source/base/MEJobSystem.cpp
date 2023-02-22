@@ -49,6 +49,54 @@ JobSystem::~JobSystem() {
         state.m_Thread.join();
     }
 }
+void JobSystem::adopt() noexcept
+{
+
+}
+
+void JobSystem::emancipate() noexcept
+{
+
+}
+
+JobSystem::Job* JobSystem::create(Job *parent, JobFunc func) noexcept
+{
+    return nullptr;
+}
+
+void JobSystem::cancel(Job* &job) noexcept {
+
+}
+
+JobSystem::Job *JobSystem::retain(Job *job) noexcept
+{
+     return nullptr;
+}
+
+void JobSystem::release(Job *&job) noexcept
+{
+}
+
+void JobSystem::run(Job *&job) noexcept
+{
+}
+
+void JobSystem::signal() noexcept
+{
+}
+
+JobSystem::Job *JobSystem::runAndRetain(Job *job) noexcept
+{
+     return nullptr;
+}
+
+void JobSystem::runAndRelease(Job *&job) noexcept
+{
+}
+
+void JobSystem::runAndWait(Job *&job) noexcept
+{
+}
 
 void JobSystem::loop(ThreadState* state) noexcept {
     setThreadName("JobSystem::loop");
