@@ -51,51 +51,128 @@ JobSystem::~JobSystem() {
 }
 void JobSystem::adopt() noexcept
 {
+    const auto tid = std::this_thread::get_id();
 
+    std::unique_lock<MESpinLock> lock(m_ThreadMapLock);
+    auto iter = m_ThreadMap.find(tid);
+    ThreadState* const state = (iter == m_ThreadMap.end() ? nullptr : iter->second);
+    lock.unlock();
+
+    if(state) {
+        return;
+    }
+
+    uint16_t adopted = m_AdoptedThreads.fetch_add(1, std::memory_order_relaxed);
+    size_t index = adopted + m_ThreadCount;
+
+    if(index < m_ThreadStates.size()) {
+        return;
+    }
+
+    lock.lock();
+    m_ThreadMap[tid] = &m_ThreadStates[index];
 }
 
 void JobSystem::emancipate() noexcept
 {
-
+    const auto tid = std::this_thread::get_id();
+    std::lock_guard<MESpinLock> lock(m_ThreadMapLock);
+    auto iter = m_ThreadMap.find(tid);
+    ThreadState* const state = (iter==m_ThreadMap.end()?nullptr : iter->second);
+    if(!state || state->m_JS!=this) {
+        return;
+    }
+    m_ThreadMap.erase(iter);
 }
 
 JobSystem::Job* JobSystem::create(Job *parent, JobFunc func) noexcept
 {
-    return nullptr;
+    parent =((parent==nullptr) ? m_RootJob : parent);
+    Job* const job = allocateJob();
+    if(job) {
+        size_t index = 0x7FFF;
+        if(parent) {
+            auto parentJonCount = parent->m_RunningJobCount.fetch_add(1, std::memory_order_relaxed);
+            assert(parentJonCount>0);
+            index = parent - m_JobStroageBase;
+            assert(index<MAX_JOB_COUNT);
+        }
+        job->m_Function=func;
+        job->m_Parent=uint16_t(index);
+    }
+    return job;
 }
 
 void JobSystem::cancel(Job* &job) noexcept {
-
+    finish(job);
+    job = nullptr;
 }
 
 JobSystem::Job *JobSystem::retain(Job *job) noexcept
 {
-     return nullptr;
+    JobSystem::Job* retained = job;
+    incRef(retained);
+     return retained;
 }
 
 void JobSystem::release(Job *&job) noexcept
 {
+    decRef(job);
+    job = nullptr;
 }
 
 void JobSystem::run(Job *&job) noexcept
 {
+    ThreadState& state(getState());
+    put(state.m_WorkQueue, job);
+    job = nullptr;
 }
 
 void JobSystem::signal() noexcept
 {
+    wakeAll();
 }
 
 JobSystem::Job *JobSystem::runAndRetain(Job *job) noexcept
 {
-     return nullptr;
+    JobSystem::Job* retained = retain(job);
+    run(job);
+     return retained;
 }
 
-void JobSystem::runAndRelease(Job *&job) noexcept
+void JobSystem::waitAndRelease(Job *&job) noexcept
 {
+    assert(job);
+    assert(job->m_RefCount.load(std::memory_order_relaxed)>1);
+
+    ThreadState& state(getState());
+    do {
+        if(!execute(state)) {
+            //测试任务是否完成，避免获得锁
+            if(hasJobCompleted(job)) {
+                break;
+            }
+
+            //等待任务是否被其他线程处理
+            //从execute返回，说明队列是空的，但任务还没完成，它在其他线程中运行，需要时间去等待
+            std::unique_lock<std::mutex> lock(m_Mutex);
+            if(!hasJobCompleted(job) && !hasActiveJobs() && !exitRequested()) {
+                wait(lock,job);
+            }
+        }
+    } while (!hasJobCompleted(job) && !exitRequested());
+
+    if(job==m_RootJob) {
+        m_RootJob=nullptr;
+    }
+
+    release(job);
 }
 
 void JobSystem::runAndWait(Job *&job) noexcept
 {
+    runAndRetain(job);
+    waitAndRelease(job);
 }
 
 void JobSystem::loop(ThreadState* state) noexcept {

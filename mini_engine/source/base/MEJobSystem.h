@@ -132,7 +132,7 @@ public:
 
     //等待任务并销毁它，当前线程必须属于JobSystem，
     //任务必须从retain、runAndRetain中获取
-    void runAndRelease(Job*& job) noexcept;
+    void waitAndRelease(Job*& job) noexcept;
 
     //运行并等待任务，这相当于调用runAndRetain(job)、wait(job)
     void runAndWait(Job*& job) noexcept;
