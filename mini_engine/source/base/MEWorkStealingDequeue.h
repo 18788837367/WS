@@ -73,7 +73,7 @@ TYPE MEWorkStealingDequeue<TYPE, COUNT>::pop() noexcept {
     auto bottom = m_Buttom.fetch_sub(1, std::memory_order_seq_cst) - 1;
     assert(bottom >= -1);
 
-    auto top = m_Top.fetch_sub(1, std::memory_order_seq_cst);
+    auto top = m_Top.load(std::memory_order_seq_cst);
     if (top < bottom) {
         return getItemAt(bottom);
     }
