@@ -25,7 +25,7 @@ JobSystem::JobSystem(size_t userThreadCount, size_t adoptableThreadCount) noexce
     threadPoolCount = (std::max)(1, threadPoolCount);
     //限制不超过32
     threadPoolCount = (std::min)(threadPoolCount, 32);
-    m_ThreadStates= std::vector<ThreadState, STLAlignedAllocator<>>(threadPoolCount + adoptableThreadCount);
+    m_ThreadStates= std::vector<ThreadState, STLAlignedAllocator<ThreadState>>(threadPoolCount + adoptableThreadCount);
     m_ThreadCount = uint16_t(threadPoolCount);
     static_assert(std::atomic<bool>::is_always_lock_free);
     static_assert(std::atomic<uint16_t>::is_always_lock_free);
