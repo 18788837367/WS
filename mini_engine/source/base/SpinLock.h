@@ -1,14 +1,10 @@
-//
-//  MESpinLock.cpp
-//  WS
-//
-//  Created by zrf on 2023/1/9.
-//
 #pragma once
 
 #include <atomic>
 
-class MESpinLock {
+namespace ME {
+
+class SpinLock {
 public:
     void lock() noexcept {
         do {
@@ -22,3 +18,5 @@ public:
 private:
     std::atomic_flag m_Lock=ATOMIC_FLAG_INIT;
 };
+
+}

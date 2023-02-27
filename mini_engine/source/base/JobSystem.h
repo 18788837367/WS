@@ -6,20 +6,22 @@
 //
 #pragma once
 
-#include "MEObject.h"
+#include "Object.h"
 #include <functional>
 #include <atomic>
 #include <mutex>
 #include <thread>
 #include <random>
 #include <map>
-#include "MEWorkStealingDequeue.h"
-#include "MESpinLock.h"
-#include "MEAllocator.h"
+#include "WorkStealingDequeue.h"
+#include "SpinLock.h"
+#include "Allocator.h"
 
-class JobSystem : public MEObject {
+namespace ME {
+
+class JobSystem : public Object {
     static constexpr size_t MAX_JOB_COUNT = 16384;
-    using WorkQueue = MEWorkStealingDequeue<uint16_t, MAX_JOB_COUNT>;
+    using WorkQueue = WorkStealingDequeue<uint16_t, MAX_JOB_COUNT>;
 public:
     
     class Job;
@@ -192,7 +194,10 @@ private:
 
     Arena<ThreadSafeObjectPoolAllocator<Job>,LockingPolicy::NoLock> m_JobPool;
 
-    std::vector<ThreadState> m_ThreadStates;
+    template<class T>
+    using aligned_vector=std::vector<T, STLAlignedAllocator<T>>;
+    
+    std::vector<ThreadState, STLAlignedAllocator<> > m_ThreadStates;
     std::atomic<bool> m_ExitRequested={false};
     std::atomic<uint16_t> m_AdoptedThreads;
     Job* const m_JobStroageBase=nullptr;
@@ -200,6 +205,8 @@ private:
     uint8_t m_ParallelSplitCount=0;
     Job* m_RootJob=nullptr;
     
-    MESpinLock m_ThreadMapLock;
+    SpinLock m_ThreadMapLock;
     std::map<std::thread::id, ThreadState*> m_ThreadMap;
 };
+
+}

@@ -1,4 +1,6 @@
-#include "MEAllocator.h"
+#include "Allocator.h"
+
+namespace ME {
 
 LinearAllocator::LinearAllocator(void* begin, void* end) noexcept
     :m_Begin(begin), m_Size(uint32_t(uintptr_t(end)-uintptr_t(begin))){
@@ -73,4 +75,6 @@ AtomicFreeList::AtomicFreeList(void* begin, void* end, size_t elementSize, size_
     assert(pointermath::add(cur, d) <= end);
     cur->m_Next = nullptr;
     m_Head.store({int32_t(head-m_Storage),0});
+}
+
 }

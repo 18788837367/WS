@@ -1,16 +1,10 @@
-//
-//  MERenderContext.h
-//  WS
-//
-//  Created by zrf on 2023/1/29.
-//
+#pragma once
 
-#ifndef MERenderContext_h
-#define MERenderContext_h
+#include "Object.h"
 
-#include "MEObject.h"
+namespace ME {
 
-class MERenderContext : public MEObject {
+class RenderContext : public Object {
 public:
     virtual void loadProgram()=0;
     
@@ -25,4 +19,4 @@ public:
     
 };
 
-#endif /* MERenderContext_h */
+}

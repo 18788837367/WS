@@ -1,12 +1,14 @@
-#include "MEObject.h"
-#include "MEJobSystem.h"
+#include "Object.h"
+#include "JobSystem.h"
 
 #include <iostream>
+
+using namespace ME;
 
 void workStealingDequeueSingleThreaded() {
     struct MyJob {
     };
-    MEWorkStealingDequeue<MyJob*, 4096> queue;
+    WorkStealingDequeue<MyJob*, 4096> queue;
     std::vector<MyJob> jobs;
     jobs.resize(4096);
     
@@ -42,7 +44,7 @@ void WorkStealingDequeue_PopSteal()
 {
     struct MyJob {
     };
-    MEWorkStealingDequeue<MyJob*, 65536> queue;
+    WorkStealingDequeue<MyJob*, 65536> queue;
     size_t size = queue.getSize();
     
     MyJob pJob;
@@ -118,7 +120,7 @@ void WorkStealingDequeue_PushPopSteal()
 {
     struct MyJob {
     };
-    MEWorkStealingDequeue<MyJob*, 65536> queue;
+    WorkStealingDequeue<MyJob*, 65536> queue;
     size_t size = queue.getSize();
     
     MyJob pJob;
@@ -197,10 +199,35 @@ void WorkStealingDequeue_PushPopSteal()
     }
 }
 
+void JobSystemParallelChildren() {
+    static std::atomic_int v = {0};
+    
+    JobSystem js;
+    js.adopt();
+    
+    struct User {
+        std::atomic_int calls = {0};
+        void func(JobSystem&, JobSystem::Job*) {
+            v++;
+            calls++;
+        }
+    } j;
+    
+    JobSystem::Job* root = js.createJob<User, &User::func>(nullptr, &j);
+//    for(int i=0;i < 256; ++i) {
+        JobSystem::Job* job = js.createJob<User, &User::func>(root, &j);
+        js.run(job);
+//    }
+    js.runAndWait(root);
+    
+    
+}
+
 int main() {
     workStealingDequeueSingleThreaded();
     WorkStealingDequeue_PopSteal();
     WorkStealingDequeue_PushPopSteal();
+    JobSystemParallelChildren();
     
     std::cout << "end" <<std::endl;
     return 0;

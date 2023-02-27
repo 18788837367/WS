@@ -1,9 +1,3 @@
-//
-//  MEObject.cpp
-//  WS
-//
-//  Created by zrf on 2023/1/9.
-//
 #pragma once
 
 

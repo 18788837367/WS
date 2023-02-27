@@ -1,13 +1,9 @@
-//
-//  MEWorkStealingDequeue.h
-//  WS
-//
-//  Created by zrf on 2023/1/9.
-//
 #pragma once
 
 #include <atomic>
 #include <assert.h>
+
+namespace ME {
 
 /*
  * 模版类,无锁,固定大小队列
@@ -23,7 +19,7 @@
  */
 
 template <typename TYPE, size_t COUNT>
-class MEWorkStealingDequeue {
+class WorkStealingDequeue {
     static_assert(!(COUNT & (COUNT-1)), "COUNT must be a power of two");
     static constexpr size_t MASK=COUNT-1;
     
@@ -61,7 +57,7 @@ public:
 
 
 template<typename TYPE, size_t COUNT>
-void MEWorkStealingDequeue<TYPE, COUNT>::push(TYPE item) noexcept {
+void WorkStealingDequeue<TYPE, COUNT>::push(TYPE item) noexcept {
     auto bottom = m_Buttom.load(std::memory_order_relaxed);
     setItemAt(bottom, item);
 
@@ -69,7 +65,7 @@ void MEWorkStealingDequeue<TYPE, COUNT>::push(TYPE item) noexcept {
 }
 
 template<typename TYPE, size_t COUNT>
-TYPE MEWorkStealingDequeue<TYPE, COUNT>::pop() noexcept {
+TYPE WorkStealingDequeue<TYPE, COUNT>::pop() noexcept {
     auto bottom = m_Buttom.fetch_sub(1, std::memory_order_seq_cst) - 1;
     assert(bottom >= -1);
 
@@ -98,7 +94,7 @@ TYPE MEWorkStealingDequeue<TYPE, COUNT>::pop() noexcept {
 }
 
 template<typename TYPE, size_t COUNT>
-TYPE MEWorkStealingDequeue<TYPE,COUNT>::steal() noexcept {
+TYPE WorkStealingDequeue<TYPE,COUNT>::steal() noexcept {
     while (true) {
         auto top = m_Top.load(std::memory_order_seq_cst);
         auto bottom = m_Buttom.load(std::memory_order_seq_cst);
@@ -112,4 +108,6 @@ TYPE MEWorkStealingDequeue<TYPE,COUNT>::steal() noexcept {
             return item;
         }
     }
+}
+
 }

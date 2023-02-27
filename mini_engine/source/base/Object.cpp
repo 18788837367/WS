@@ -1,18 +1,18 @@
-#include "MEObject.h"
+#include "Object.h"
 #include <iostream>
 
+namespace ME {
 
-
-MEObject::MEObject()
+Object::Object()
 {
     
 }
 
-MEObject::~MEObject()
+Object::~Object()
 {
 }
 
-MEObject* MEObject::internal_retain(MEObject* obj)
+Object* Object::internal_retain(Object* obj)
 {
     if(obj) {
         obj->m_RefCount.fetch_add(1,std::memory_order_relaxed);
@@ -20,7 +20,7 @@ MEObject* MEObject::internal_retain(MEObject* obj)
     return obj;
 }
 
-void MEObject::internal_release(MEObject* obj)
+void Object::internal_release(Object* obj)
 {
     if(obj) {
         auto ov=obj->m_RefCount.fetch_sub(1, std::memory_order_acq_rel);
@@ -30,8 +30,9 @@ void MEObject::internal_release(MEObject* obj)
     }
 }
 
-MEObject* MEObject::internal_assign(MEObject* obj)
+Object* Object::internal_assign(Object* obj)
 {
     return obj;
 }
 
+}

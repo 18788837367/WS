@@ -1,4 +1,4 @@
-#include "MEJobSystem.h"
+#include "JobSystem.h"
 
 #include <math.h>
 #include <iostream>
@@ -9,6 +9,8 @@
 #else
 
 #endif
+
+namespace ME {
 
 JobSystem::JobSystem(size_t userThreadCount, size_t adoptableThreadCount) noexcept
     :m_JobPool("JobSystem Job pool",MAX_JOB_COUNT*sizeof(Job))
@@ -23,7 +25,7 @@ JobSystem::JobSystem(size_t userThreadCount, size_t adoptableThreadCount) noexce
     threadPoolCount = (std::max)(1, threadPoolCount);
     //限制不超过32
     threadPoolCount = (std::min)(threadPoolCount, 32);
-    m_ThreadStates=std::vector<ThreadState>(threadPoolCount + adoptableThreadCount);
+    m_ThreadStates= std::vector<ThreadState, STLAlignedAllocator<>>(threadPoolCount + adoptableThreadCount);
     m_ThreadCount = uint16_t(threadPoolCount);
     static_assert(std::atomic<bool>::is_always_lock_free);
     static_assert(std::atomic<uint16_t>::is_always_lock_free);
@@ -53,7 +55,7 @@ void JobSystem::adopt() noexcept
 {
     const auto tid = std::this_thread::get_id();
 
-    std::unique_lock<MESpinLock> lock(m_ThreadMapLock);
+    std::unique_lock<SpinLock> lock(m_ThreadMapLock);
     auto iter = m_ThreadMap.find(tid);
     ThreadState* const state = (iter == m_ThreadMap.end() ? nullptr : iter->second);
     lock.unlock();
@@ -76,7 +78,7 @@ void JobSystem::adopt() noexcept
 void JobSystem::emancipate() noexcept
 {
     const auto tid = std::this_thread::get_id();
-    std::lock_guard<MESpinLock> lock(m_ThreadMapLock);
+    std::lock_guard<SpinLock> lock(m_ThreadMapLock);
     auto iter = m_ThreadMap.find(tid);
     ThreadState* const state = (iter==m_ThreadMap.end()?nullptr : iter->second);
     if(!state || state->m_JS!=this) {
@@ -424,4 +426,6 @@ void JobSystem::wakeAll() noexcept {
 void JobSystem::wakeOne() noexcept {
     std::lock_guard<std::mutex> lock(m_Mutex);
     m_WaiterCondition.notify_one();
+}
+
 }
