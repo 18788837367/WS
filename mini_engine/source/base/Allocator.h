@@ -234,7 +234,7 @@ public:
     }
     
     void* getFirst() noexcept {
-        return nullptr;
+        return m_Storage + m_Head.load(std::memory_order_relaxed).m_Offset;
     }
 private:
     class Node {
@@ -512,7 +512,7 @@ inline void* aligned_alloc(size_t size, size_t align) noexcept {
 #if defined(WIN32)
     p = ::_aligned_malloc(size, align);
 #else
-    ::posix_memalign(&p, size, align);
+    ::posix_memalign(&p, align, size);
 #endif
     return p;
 }

@@ -194,12 +194,9 @@ private:
 
     Arena<ThreadSafeObjectPoolAllocator<Job>,LockingPolicy::NoLock> m_JobPool;
 
-    template<class T>
-    using aligned_vector=std::vector<T, STLAlignedAllocator<T>>;
-    
-    std::vector<ThreadState, STLAlignedAllocator<> > m_ThreadStates;
+    std::vector<ThreadState, STLAlignedAllocator<ThreadState>> m_ThreadStates;
     std::atomic<bool> m_ExitRequested={false};
-    std::atomic<uint16_t> m_AdoptedThreads;
+    std::atomic<uint16_t> m_AdoptedThreads={0};
     Job* const m_JobStroageBase=nullptr;
     uint16_t m_ThreadCount=0;
     uint8_t m_ParallelSplitCount=0;

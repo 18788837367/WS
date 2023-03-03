@@ -67,7 +67,7 @@ void JobSystem::adopt() noexcept
     uint16_t adopted = m_AdoptedThreads.fetch_add(1, std::memory_order_relaxed);
     size_t index = adopted + m_ThreadCount;
 
-    if(index < m_ThreadStates.size()) {
+    if(index >= m_ThreadStates.size()) {
         return;
     }
 
@@ -244,7 +244,6 @@ bool JobSystem::execute(JobSystem::ThreadState& state) noexcept {
         //我们的队列为空，尝试steal一个任务
         job = steal(state);
     }
-    
     if(job) {
         assert(job->m_RunningJobCount.load(std::memory_order_relaxed)>=1);
         if(job->m_Function) {
@@ -291,7 +290,7 @@ JobSystem::ThreadState* JobSystem::getStateToStealFrom(JobSystem::ThreadState& s
     if (threadCount > 2) {
         do {
             std::uniform_int_distribution<uint16_t> rand(0, threadCount);
-            uint16_t index = rand(state.m_Gen);
+            uint16_t index = rand(state.m_Gen) % threadStates.size();
             assert(index < threadStates.size());
             stateToStealFrom = &threadStates[index];
         } while (stateToStealFrom == &state);
@@ -332,6 +331,8 @@ void JobSystem::finish(Job* job) noexcept {
     Job* const storage = m_JobStroageBase;
     do {
         auto runningJobCount = job->m_RunningJobCount.fetch_sub(1,std::memory_order_acq_rel);
+        std::cout << "runningJobCount:" <<runningJobCount << std::endl;
+
         assert(runningJobCount>0);
         
         if(runningJobCount==1) {
@@ -347,6 +348,9 @@ void JobSystem::finish(Job* job) noexcept {
         }
     } while (job);
     
+    if(notify) {
+        wakeAll();
+    }
 }
 
 void JobSystem::put(WorkQueue& workQueue, Job* job) noexcept {
