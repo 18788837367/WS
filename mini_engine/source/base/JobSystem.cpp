@@ -179,7 +179,7 @@ void JobSystem::runAndWait(Job *&job) noexcept
 
 void JobSystem::loop(ThreadState* state) noexcept {
     setThreadName("JobSystem::loop");
-    std::cout << "loop" << std::endl;
+    //std::cout << "loop:" << std::this_thread::get_id() << std::endl;
     
     //设置线程亲和力，以防止从一个核心跳到另外一个核心。在Android上，亲和力似乎需要不时重置
     setThreadAffinityById(state->m_ID);
@@ -331,7 +331,6 @@ void JobSystem::finish(Job* job) noexcept {
     Job* const storage = m_JobStroageBase;
     do {
         auto runningJobCount = job->m_RunningJobCount.fetch_sub(1,std::memory_order_acq_rel);
-        std::cout << "runningJobCount:" <<runningJobCount << std::endl;
 
         assert(runningJobCount>0);
         

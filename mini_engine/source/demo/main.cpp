@@ -220,7 +220,7 @@ void JobSystemParallelChildren() {
 //    }
     js.runAndWait(root);
     
-    
+    js.emancipate();
 }
 
 int main() {

@@ -197,7 +197,7 @@ public:
         Node* const storage = m_Storage;
         
         HeadPtr currentHead = m_Head.load();
-        while (!(currentHead.m_Offset>=0))
+        while (currentHead.m_Offset>=0)
         {
             //如果其他线程跑在我们前面，这里next可能已经存在。
             //这种情况下，计算的newHead会被丢弃，因为compare_exchange_weak失败，
