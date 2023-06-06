@@ -48,7 +48,9 @@ JobSystem::JobSystem(size_t userThreadCount, size_t adoptableThreadCount) noexce
 JobSystem::~JobSystem() {
     requestExit();
     for (auto& state : m_ThreadStates) {
-        state.m_Thread.join();
+        if(state.m_Thread.joinable()) {
+            state.m_Thread.join();
+        }
     }
 }
 void JobSystem::adopt() noexcept
@@ -145,7 +147,7 @@ JobSystem::Job *JobSystem::runAndRetain(Job *job) noexcept
 void JobSystem::waitAndRelease(Job *&job) noexcept
 {
     assert(job);
-    assert(job->m_RefCount.load(std::memory_order_relaxed)>1);
+    assert(job->m_RefCount.load(std::memory_order_relaxed)>=1);
 
     ThreadState& state(getState());
     do {

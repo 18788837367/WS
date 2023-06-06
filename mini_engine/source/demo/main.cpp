@@ -1,5 +1,6 @@
 #include "Object.h"
 #include "JobSystem.h"
+#include "vec2.h"
 
 #include <iostream>
 
@@ -214,20 +215,162 @@ void JobSystemParallelChildren() {
     } j;
     
     JobSystem::Job* root = js.createJob<User, &User::func>(nullptr, &j);
-//    for(int i=0;i < 256; ++i) {
+    for(int i=0;i < 256; ++i) {
         JobSystem::Job* job = js.createJob<User, &User::func>(root, &j);
         js.run(job);
-//    }
+    }
     js.runAndWait(root);
+    
+    if(v.load()!=257 || j.calls!=257) {
+        std::cout << "JobSystemParallelChildren error" <<std::endl;
+    }
     
     js.emancipate();
 }
+
+void JobSystemSequentialChildren()
+{
+    JobSystem js;
+    js.adopt();
+    
+    struct User {
+        int c;
+        int i, j;
+        void func(JobSystem& js, JobSystem::Job* job) {
+            if(c < 43) {
+                User u{c+1};
+                JobSystem::Job* p = js.createJob<User, &User::func>(job, &u);
+                js.runAndWait(p);
+                
+                i=u.i+u.j;
+                j=u.i;
+            }
+            else {
+                i=0;
+                j=1;
+            }
+        }
+    };
+    
+    User u{0};
+    
+    JobSystem::Job* root = js.createJob<User, &User::func>(nullptr, &u);
+    js.runAndWait(root);
+    
+    if(u.i!=433494437) {
+        std::cout << "JobSystemSequentialChildren error:" << u.i << std::endl;
+    }
+    
+    js.emancipate();
+}
+
+void JobSystemParallelFor()
+{
+    
+    
+    TVec2<float> xx;
+    xx.x=1;
+    xx.y=2;
+    TVec2<double> yy;
+    yy.x=11;
+    yy.y=12;
+    xx+=yy;
+    std::cout << "size:" << xx.x << std::endl;
+    
+    auto a1 = xx+yy;
+    std::cout << "size:" << a1.x << "  " << a1.y << std::endl;
+    
+    auto a2 = xx+5;
+    std::cout << "size:" << a2.x << "  " << a2.y << std::endl;
+    
+    auto a3 = 5+xx;
+    std::cout << "size:" << a3.x << "  " << a3.y << std::endl;
+    
+    auto z1 = xx-yy;
+    auto z2 = xx-5;
+    auto z3 = 5-xx;
+    
+    std::cout << "size:" << z1.x << "  " << z1.y << std::endl;
+    std::cout << "size:" << z2.x << "  " << z2.y << std::endl;
+    std::cout << "size:" << z3.x << "  " << z3.y << std::endl;
+    
+    
+    xx*=yy;
+    std::cout << "size:" << xx.x << "  " << xx.y << std::endl;
+    xx*=5;
+    std::cout << "size:" << xx.x << "  " << xx.y << std::endl;
+    
+    xx/=yy;
+    std::cout << "size:" << xx.x << "  " << xx.y << std::endl;
+    xx/=5;
+    std::cout << "size:" << xx.x << "  " << xx.y << std::endl;
+    
+    {
+        auto a4 = xx * 5;
+        auto a5 = 5 * xx;
+        auto a6 = xx * yy;
+        auto a7 = xx / 5;
+        auto a8 = 5 / xx;
+        auto a9 = xx / yy;
+        std::cout << "size:" << a4.x << "  " << a4.y << std::endl;
+        std::cout << "size:" << a5.x << "  " << a5.y << std::endl;
+        std::cout << "size:" << a6.x << "  " << a6.y << std::endl;
+        std::cout << "size:" << a7.x << "  " << a7.y << std::endl;
+        std::cout << "size:" << a8.x << "  " << a8.y << std::endl;
+        std::cout << "size:" << a9.x << "  " << a9.y << std::endl;
+    }
+    
+    {
+        auto a10 = -xx;
+        std::cout << "size:" << a10.x << "  " << a10.y << std::endl;
+    }
+    
+    {
+        xx.x=1;
+        xx.y=2;
+        TVec2<float> xx1;
+        xx1.x=1;
+        xx1.y=2;
+        auto a11 = equal(xx, xx1);
+        auto a12 = notEqual(xx, xx1);
+        auto a13 = lessThan(xx, xx1);
+        auto a14 = lessThanEqual(xx, xx1);
+        auto a15 = greaterThan(xx, xx1);
+        auto a16 = greaterThanEqual(xx, xx1);
+        std::cout << "size:" << (xx1==xx) << std::endl;
+        std::cout << "size:" << (xx1!=xx) << std::endl;
+        std::cout << "size:" << a11.x << " " << a11.y << std::endl;
+        std::cout << "size:" << a12.x << " " << a12.y << std::endl;
+        std::cout << "size:" << a13.x << " " << a13.y << std::endl;
+        std::cout << "size:" << a14.x << " " << a14.y << std::endl;
+        std::cout << "size:" << a15.x << " " << a15.y << std::endl;
+        std::cout << "size:" << a16.x << " " << a16.y << std::endl;
+        xx1.x=11;
+        auto a21 = equal(xx, xx1);
+        auto a22 = notEqual(xx, xx1);
+        auto a23 = lessThan(xx, xx1);
+        auto a24 = lessThanEqual(xx, xx1);
+        auto a25 = greaterThan(xx, xx1);
+        auto a26 = greaterThanEqual(xx, xx1);
+        std::cout << "size:" << (xx1==xx) << std::endl;
+        std::cout << "size:" << (xx1!=xx) << std::endl;
+        std::cout << "size:" << a11.x << " " << a11.y << std::endl;
+        std::cout << "size:" << a12.x << " " << a12.y << std::endl;
+        std::cout << "size:" << a13.x << " " << a13.y << std::endl;
+        std::cout << "size:" << a14.x << " " << a14.y << std::endl;
+        std::cout << "size:" << a15.x << " " << a15.y << std::endl;
+        std::cout << "size:" << a16.x << " " << a16.y << std::endl;
+    }
+}
+
 
 int main() {
     workStealingDequeueSingleThreaded();
     WorkStealingDequeue_PopSteal();
     WorkStealingDequeue_PushPopSteal();
     JobSystemParallelChildren();
+    JobSystemSequentialChildren();
+    JobSystemParallelFor();
     
     std::cout << "end" <<std::endl;
     return 0;
